@@ -185,6 +185,54 @@
             cursor: not-allowed;
         }
         
+        .search-history {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .history-section {
+            margin-bottom: 15px;
+        }
+        
+        .history-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #5f6368;
+            margin-bottom: 8px;
+        }
+        
+        .history-item {
+            display: inline-block;
+            margin: 3px;
+            padding: 5px 10px;
+            background: white;
+            border: 1px solid #dfe1e5;
+            border-radius: 16px;
+            font-size: 12px;
+            color: #4285f4;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .history-item:hover {
+            background: #e8f0fe;
+            border-color: #4285f4;
+        }
+        
+        .clear-history {
+            font-size: 12px;
+            color: #70757a;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
+        .clear-history:hover {
+            color: #d93025;
+        }
+        
         @media (max-width: 600px) {
             .logo {
                 font-size: 36px;
@@ -219,6 +267,39 @@
                 <button type="submit" class="search-button">Search</button>
             </center>
         </form>
+        
+        <!-- Search History -->
+        {% if recent_searches or popular_queries %}
+        <div class="search-history">
+            {% if recent_searches %}
+            <div class="history-section">
+                <div class="history-title">Recent Searches</div>
+                {% for search in recent_searches %}
+                <form method="POST" style="display: inline;">
+                    <input type="hidden" name="query" value="{{ search.query }}">
+                    <button type="submit" class="history-item">{{ search.query }}</button>
+                </form>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            {% if popular_queries %}
+            <div class="history-section">
+                <div class="history-title">Popular Searches</div>
+                {% for query in popular_queries %}
+                <form method="POST" style="display: inline;">
+                    <input type="hidden" name="query" value="{{ query }}">
+                    <button type="submit" class="history-item">{{ query }}</button>
+                </form>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            <div style="text-align: right; margin-top: 10px;">
+                <a href="#" class="clear-history" onclick="clearHistory(); return false;">Clear History</a>
+            </div>
+        </div>
+        {% endif %}
         
         {% if results %}
             <div class="stats">Found {{ total_results }} results (page {{ page }} of {{ total_pages }})</div>
@@ -357,6 +438,18 @@
         
         // Initialize autocomplete
         autocomplete(document.getElementById("searchInput"));
+        
+        function clearHistory() {
+            if (confirm('Are you sure you want to clear all search history?')) {
+                fetch('/clear_history')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            location.reload();
+                        }
+                    });
+            }
+        }
     </script>
 </body>
 </html>

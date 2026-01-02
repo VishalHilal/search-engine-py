@@ -1,10 +1,12 @@
 from flask import Flask, request, render_template, jsonify
 from config import HOST, PORT, DEBUG
+from search_history import SearchHistory
 
 
 def create_app(search_engine):
     """Create and configure Flask application"""
     app = Flask(__name__)
+    search_history = SearchHistory()
     
     @app.route('/', methods=['GET', 'POST'])
     def home():
@@ -24,6 +26,10 @@ def create_app(search_engine):
                 total_results = len(all_results)
                 total_pages = (total_results + results_per_page - 1) // results_per_page
                 
+                # Add to search history (only on first page, not pagination)
+                if page == 1:
+                    search_history.add_search(query, total_results)
+                
                 # Get results for current page and add highlighting
                 start_idx = (page - 1) * results_per_page
                 end_idx = start_idx + results_per_page
@@ -42,7 +48,9 @@ def create_app(search_engine):
                             page=page,
                             total_pages=total_pages,
                             total_results=total_results,
-                            results_per_page=results_per_page)
+                            results_per_page=results_per_page,
+                            recent_searches=search_history.get_recent_searches(5),
+                            popular_queries=search_history.get_popular_queries(5))
     
     @app.route('/suggest')
     def suggest():
@@ -53,6 +61,12 @@ def create_app(search_engine):
         
         suggestions = search_engine.get_suggestions(query, limit=10)
         return jsonify(suggestions)
+    
+    @app.route('/clear_history')
+    def clear_history():
+        """Clear search history"""
+        search_history.clear_history()
+        return jsonify({'status': 'success'})
     
     return app
 

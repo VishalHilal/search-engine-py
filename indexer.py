@@ -120,3 +120,18 @@ class SearchEngine:
         self.idf_scores = data['idf_scores']
         self.doc_count = len(self.documents)
         print(f"Index loaded from {filename}")
+    
+    def get_suggestions(self, query, limit=10):
+        """Get auto-complete suggestions based on indexed terms"""
+        query = query.lower()
+        suggestions = []
+        
+        # Find terms that start with the query
+        for term in self.inverted_index.keys():
+            if term.startswith(query) and len(term) > len(query):
+                suggestions.append(term)
+        
+        # Sort by frequency (more common terms first)
+        suggestions.sort(key=lambda x: len(self.inverted_index[x]), reverse=True)
+        
+        return suggestions[:limit]

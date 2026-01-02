@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, jsonify
 from config import HOST, PORT, DEBUG
 
 
@@ -10,13 +10,42 @@ def create_app(search_engine):
     def home():
         query = ''
         results = []
+        page = 1
+        results_per_page = 10
+        total_results = 0
+        total_pages = 0
         
         if request.method == 'POST':
             query = request.form.get('query', '')
+            page = int(request.form.get('page', 1))
+            
             if query:
-                results = search_engine.search(query)
+                all_results = search_engine.search(query, top_k=100)  # Get more results for pagination
+                total_results = len(all_results)
+                total_pages = (total_results + results_per_page - 1) // results_per_page
+                
+                # Get results for current page
+                start_idx = (page - 1) * results_per_page
+                end_idx = start_idx + results_per_page
+                results = all_results[start_idx:end_idx]
         
-        return render_template('index.html', query=query, results=results)
+        return render_template('index.html', 
+                            query=query, 
+                            results=results, 
+                            page=page,
+                            total_pages=total_pages,
+                            total_results=total_results,
+                            results_per_page=results_per_page)
+    
+    @app.route('/suggest')
+    def suggest():
+        """Provide auto-complete suggestions"""
+        query = request.args.get('q', '').lower()
+        if len(query) < 2:
+            return jsonify([])
+        
+        suggestions = search_engine.get_suggestions(query, limit=10)
+        return jsonify(suggestions)
     
     return app
 

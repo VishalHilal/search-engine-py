@@ -138,6 +138,13 @@
             font-size: 14px;
         }
         
+        mark {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 1px 2px;
+            border-radius: 2px;
+        }
+        
         .no-results {
             text-align: center;
             color: #70757a;
@@ -217,9 +224,9 @@
             <div class="stats">Found {{ total_results }} results (page {{ page }} of {{ total_pages }})</div>
             {% for result in results %}
             <div class="result">
-                <div class="result-title">{{ result.title or 'Untitled' }}</div>
+                <div class="result-title">{{ result.title|safe }}</div>
                 <div class="result-url">{{ result.url }}</div>
-                <div class="result-snippet">{{ result.snippet }}</div>
+                <div class="result-snippet">{{ result.snippet|safe }}</div>
             </div>
             {% endfor %}
             

@@ -24,10 +24,17 @@ def create_app(search_engine):
                 total_results = len(all_results)
                 total_pages = (total_results + results_per_page - 1) // results_per_page
                 
-                # Get results for current page
+                # Get results for current page and add highlighting
                 start_idx = (page - 1) * results_per_page
                 end_idx = start_idx + results_per_page
-                results = all_results[start_idx:end_idx]
+                page_results = all_results[start_idx:end_idx]
+                
+                # Add highlighting to snippets
+                for result in page_results:
+                    result['snippet'] = search_engine.highlight_terms(result['snippet'], query)
+                    result['title'] = search_engine.highlight_terms(result['title'], query)
+                
+                results = page_results
         
         return render_template('index.html', 
                             query=query, 

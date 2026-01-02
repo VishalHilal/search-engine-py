@@ -5,6 +5,31 @@ from collections import defaultdict, Counter
 from config import INDEX_FILE
 
 
+class QueryParser:
+    """Parse advanced search queries with operators"""
+    
+    @staticmethod
+    def parse_query(query):
+        """Parse query with AND, OR, NOT, and phrase operators"""
+        query = query.strip()
+        
+        # Handle quoted phrases first
+        phrases = re.findall(r'"([^"]*)"', query)
+        for phrase in phrases:
+            query = query.replace(f'"{phrase}"', f'PHRASE_{len(phrases)-1}')
+        
+        # Split into tokens
+        tokens = re.findall(r'\b\w+\b|[()]|AND|OR|NOT|PHRASE_\d+', query)
+        
+        # Replace phrase placeholders
+        for i, phrase in enumerate(phrases):
+            for j, token in enumerate(tokens):
+                if token == f'PHRASE_{i}':
+                    tokens[j] = phrase
+        
+        return tokens, phrases
+
+
 class SearchEngine:
     """Indexes and searches documents using TF-IDF"""
     
@@ -68,7 +93,41 @@ class SearchEngine:
         return tf * idf
     
     def search(self, query, top_k=10):
-        """Search for documents matching the query"""
+        """Search for documents matching the query with advanced operators"""
+        # Parse the query
+        tokens, phrases = QueryParser.parse_query(query)
+        
+        # If no operators found, use simple search
+        if not any(token in ['AND', 'OR', 'NOT', '(', ')'] for token in tokens) and not phrases:
+            return self._simple_search(query, top_k)
+        
+        # Advanced search
+        matching_docs = []
+        
+        for doc_id in range(len(self.documents)):
+            if self.evaluate_query(tokens, doc_id):
+                # Calculate relevance score
+                score = self._calculate_relevance_score(tokens, doc_id)
+                matching_docs.append((doc_id, score))
+        
+        # Sort by score
+        matching_docs.sort(key=lambda x: x[1], reverse=True)
+        
+        # Return top results
+        results = []
+        for doc_id, score in matching_docs[:top_k]:
+            doc = self.documents[doc_id]
+            results.append({
+                'url': doc['url'],
+                'title': doc['title'],
+                'snippet': doc['content'][:200] + '...',
+                'score': score
+            })
+        
+        return results
+    
+    def _simple_search(self, query, top_k=10):
+        """Original simple search implementation"""
         query_tokens = self.tokenize(query)
         
         if not query_tokens:
@@ -98,6 +157,48 @@ class SearchEngine:
             })
         
         return results
+    
+    def _calculate_relevance_score(self, tokens, doc_id):
+        """Calculate relevance score for advanced query"""
+        score = 0.0
+        doc_text = self.documents[doc_id]['title'] + ' ' + self.documents[doc_id]['content']
+        doc_tokens = self.tokenize(doc_text)
+        
+        for token in tokens:
+            if token not in ['AND', 'OR', 'NOT', '(', ')']:
+                if ' ' in token:  # Phrase
+                    if self.phrase_search(token, doc_id):
+                        score += 5.0  # Bonus for phrase matches
+                else:
+                    if token.lower() in doc_tokens:
+                        score += self.calculate_tf_idf(token.lower(), doc_id)
+        
+        return score
+    
+    def highlight_terms(self, text, query):
+        """Highlight search terms in text"""
+        tokens, phrases = QueryParser.parse_query(query)
+        
+        # Extract search terms (excluding operators)
+        search_terms = []
+        for token in tokens:
+            if token not in ['AND', 'OR', 'NOT', '(', ')']:
+                if ' ' in token:  # Phrase
+                    search_terms.append(token.lower())
+                else:
+                    search_terms.append(token.lower())
+        
+        # Highlight terms in text
+        highlighted_text = text
+        for term in search_terms:
+            if ' ' in term:  # Phrase
+                pattern = re.compile(re.escape(term), re.IGNORECASE)
+                highlighted_text = pattern.sub(f'<mark>{term}</mark>', highlighted_text)
+            else:
+                pattern = re.compile(r'\b' + re.escape(term) + r'\b', re.IGNORECASE)
+                highlighted_text = pattern.sub(f'<mark>{term}</mark>', highlighted_text)
+        
+        return highlighted_text
     
     def save_index(self, filename=INDEX_FILE):
         """Save index to disk"""
@@ -135,3 +236,81 @@ class SearchEngine:
         suggestions.sort(key=lambda x: len(self.inverted_index[x]), reverse=True)
         
         return suggestions[:limit]
+    
+    def phrase_search(self, phrase, doc_id):
+        """Search for exact phrase in document"""
+        doc = self.documents[doc_id]
+        text = (doc['title'] + ' ' + doc['content']).lower()
+        return phrase.lower() in text
+    
+    def evaluate_query(self, tokens, doc_id):
+        """Evaluate parsed query against a document"""
+        stack = []
+        i = 0
+        
+        while i < len(tokens):
+            token = tokens[i]
+            
+            if token == '(':
+                # Find matching closing parenthesis
+                paren_count = 1
+                j = i + 1
+                while j < len(tokens) and paren_count > 0:
+                    if tokens[j] == '(':
+                        paren_count += 1
+                    elif tokens[j] == ')':
+                        paren_count -= 1
+                    j += 1
+                
+                # Recursively evaluate sub-expression
+                sub_tokens = tokens[i+1:j-1]
+                result = self.evaluate_query(sub_tokens, doc_id)
+                stack.append(result)
+                i = j
+            elif token == 'AND':
+                if len(stack) >= 2:
+                    right = stack.pop()
+                    left = stack.pop()
+                    stack.append(left and right)
+                i += 1
+            elif token == 'OR':
+                if len(stack) >= 2:
+                    right = stack.pop()
+                    left = stack.pop()
+                    stack.append(left or right)
+                i += 1
+            elif token == 'NOT':
+                if i + 1 < len(tokens):
+                    next_token = tokens[i + 1]
+                    if next_token in ['AND', 'OR', 'NOT', '(', ')']:
+                        i += 1
+                        continue
+                    
+                    # Check if next token exists in document
+                    term_found = next_token.lower() in self.tokenize(
+                        self.documents[doc_id]['title'] + ' ' + self.documents[doc_id]['content']
+                    )
+                    stack.append(not term_found)
+                    i += 2
+                else:
+                    i += 1
+            elif token == ')':
+                i += 1
+            else:
+                # Regular term or phrase
+                if ' ' in token:  # It's a phrase
+                    found = self.phrase_search(token, doc_id)
+                else:
+                    found = token.lower() in self.tokenize(
+                        self.documents[doc_id]['title'] + ' ' + self.documents[doc_id]['content']
+                    )
+                stack.append(found)
+                i += 1
+        
+        # Final evaluation of remaining stack (default to OR)
+        if not stack:
+            return False
+        result = stack[0]
+        for val in stack[1:]:
+            result = result or val
+        return result

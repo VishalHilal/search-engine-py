@@ -71,7 +71,37 @@ class SearchEngine:
             doc_freq = len(postings)
             self.idf_scores[term] = math.log(self.doc_count / doc_freq)
         
+        # Build domain and content type indexes for filtering
+        self.build_filter_indexes()
+        
         print(f"Index built with {len(self.inverted_index)} unique terms!")
+    
+    def build_filter_indexes(self):
+        """Build indexes for filtering by domain, content type, and date"""
+        self.domain_index = defaultdict(list)
+        self.content_type_index = defaultdict(list)
+        self.date_index = defaultdict(list)
+        
+        for doc_id, doc in enumerate(self.documents):
+            metadata = doc.get('metadata', {})
+            
+            # Domain index
+            domain = metadata.get('domain', 'unknown')
+            self.domain_index[domain].append(doc_id)
+            
+            # Content type index
+            content_type = metadata.get('content_type', 'text/html')
+            self.content_type_index[content_type].append(doc_id)
+            
+            # Date index (by year and month)
+            pub_date = metadata.get('publication_date')
+            if pub_date:
+                try:
+                    # Extract year from date
+                    year = pub_date.split('-')[0] if '-' in pub_date else pub_date.split('/')[-1]
+                    self.date_index[year].append(doc_id)
+                except:
+                    pass
     
     def calculate_tf_idf(self, term, doc_id):
         """Calculate TF-IDF score for a term in a document"""
@@ -92,19 +122,22 @@ class SearchEngine:
         idf = self.idf_scores[term]
         return tf * idf
     
-    def search(self, query, top_k=10):
-        """Search for documents matching the query with advanced operators"""
+    def search(self, query, top_k=10, filters=None):
+        """Search for documents matching the query with advanced operators and filters"""
         # Parse the query
         tokens, phrases = QueryParser.parse_query(query)
         
         # If no operators found, use simple search
         if not any(token in ['AND', 'OR', 'NOT', '(', ')'] for token in tokens) and not phrases:
-            return self._simple_search(query, top_k)
+            return self._simple_search(query, top_k, filters)
         
-        # Advanced search
+        # Advanced search with filters
         matching_docs = []
         
-        for doc_id in range(len(self.documents)):
+        # Apply filters first to get candidate documents
+        candidate_docs = self.apply_filters(filters) if filters else set(range(len(self.documents)))
+        
+        for doc_id in candidate_docs:
             if self.evaluate_query(tokens, doc_id):
                 # Calculate relevance score
                 score = self._calculate_relevance_score(tokens, doc_id)
@@ -121,17 +154,56 @@ class SearchEngine:
                 'url': doc['url'],
                 'title': doc['title'],
                 'snippet': doc['content'][:200] + '...',
-                'score': score
+                'score': score,
+                'metadata': doc.get('metadata', {})
             })
         
         return results
     
-    def _simple_search(self, query, top_k=10):
-        """Original simple search implementation"""
+    def apply_filters(self, filters):
+        """Apply filters to get candidate documents"""
+        candidate_docs = set(range(len(self.documents)))
+        
+        # Domain filter
+        if filters.get('domain'):
+            domain_docs = set()
+            for domain in filters['domain']:
+                domain_docs.update(self.domain_index.get(domain, []))
+            candidate_docs &= domain_docs
+        
+        # Content type filter
+        if filters.get('content_type'):
+            content_docs = set()
+            for ctype in filters['content_type']:
+                content_docs.update(self.content_type_index.get(ctype, []))
+            candidate_docs &= content_docs
+        
+        # Date filter
+        if filters.get('date'):
+            date_docs = set()
+            for date in filters['date']:
+                date_docs.update(self.date_index.get(date, []))
+            candidate_docs &= date_docs
+        
+        return candidate_docs
+    
+    def get_filter_options(self):
+        """Get available filter options"""
+        return {
+            'domains': sorted(list(self.domain_index.keys())),
+            'content_types': sorted(list(self.content_type_index.keys())),
+            'dates': sorted(list(self.date_index.keys()), reverse=True)
+        }
+    
+    def _simple_search(self, query, top_k=10, filters=None):
+        """Original simple search implementation with filters"""
         query_tokens = self.tokenize(query)
         
         if not query_tokens:
             return []
+        
+        # Apply filters first
+        candidate_docs = self.apply_filters(filters) if filters else set(range(len(self.documents)))
         
         # Calculate scores for each document
         scores = defaultdict(float)
@@ -140,7 +212,8 @@ class SearchEngine:
             if term in self.inverted_index:
                 for posting in self.inverted_index[term]:
                     doc_id = posting['doc_id']
-                    scores[doc_id] += self.calculate_tf_idf(term, doc_id)
+                    if doc_id in candidate_docs:  # Only consider filtered documents
+                        scores[doc_id] += self.calculate_tf_idf(term, doc_id)
         
         # Sort by score
         ranked_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -153,7 +226,8 @@ class SearchEngine:
                 'url': doc['url'],
                 'title': doc['title'],
                 'snippet': doc['content'][:200] + '...',
-                'score': score
+                'score': score,
+                'metadata': doc.get('metadata', {})
             })
         
         return results

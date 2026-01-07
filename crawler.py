@@ -2,6 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import time
+import re
+from datetime import datetime
 from config import CRAWL_DELAY, REQUEST_TIMEOUT, USER_AGENT
 
 
@@ -32,8 +34,8 @@ class WebCrawler:
             print(f"Error fetching {url}: {e}")
             return None
     
-    def extract_text(self, html):
-        """Extract text content from HTML"""
+    def extract_text(self, html, url):
+        """Extract text content and metadata from HTML"""
         soup = BeautifulSoup(html, 'html.parser')
         
         # Remove script and style elements
@@ -51,7 +53,43 @@ class WebCrawler:
         chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
         text = ' '.join(chunk for chunk in chunks if chunk)
         
-        return title, text
+        # Extract metadata
+        metadata = self.extract_metadata(soup, url)
+        
+        return title, text, metadata
+    
+    def extract_metadata(self, soup, url):
+        """Extract metadata from the page"""
+        metadata = {
+            'url': url,
+            'domain': urlparse(url).netloc,
+            'content_type': 'text/html',
+            'crawl_date': datetime.now().isoformat(),
+            'content_length': 0
+        }
+        
+        # Try to extract publication date
+        date_patterns = [
+            r'(\d{4}-\d{2}-\d{2})',
+            r'(\d{1,2}/\d{1,2}/\d{4})',
+            r'(\d{1,2}\s+\w+\s+\d{4})'
+        ]
+        
+        for pattern in date_patterns:
+            dates = re.findall(pattern, soup.get_text())
+            if dates:
+                metadata['publication_date'] = dates[0]
+                break
+        
+        # Extract content type from meta tags
+        meta_ctype = soup.find('meta', attrs={'http-equiv': 'content-type'})
+        if meta_ctype:
+            metadata['content_type'] = meta_ctype.get('content', 'text/html').split(';')[0]
+        
+        # Content length
+        metadata['content_length'] = len(soup.get_text())
+        
+        return metadata
     
     def extract_links(self, html, base_url):
         """Extract all links from a page"""
@@ -87,17 +125,18 @@ class WebCrawler:
             self.visited.add(url)
             
             # Extract content
-            title, text = self.extract_text(html)
+            title, text, metadata = self.extract_text(html, url)
             
             # Extract links for further crawling
             links = self.extract_links(html, url)
             to_visit.extend(links)
             
-            # Store crawled data
+            # Store crawled data with metadata
             crawled_data.append({
                 'url': url,
                 'title': title,
-                'content': text
+                'content': text,
+                'metadata': metadata
             })
             
             # Be polite - don't hammer servers

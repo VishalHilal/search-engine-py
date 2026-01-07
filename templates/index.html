@@ -233,6 +233,76 @@
             color: #d93025;
         }
         
+        .filters {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e8eaed;
+        }
+        
+        .filter-section {
+            margin-bottom: 15px;
+        }
+        
+        .filter-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #5f6368;
+            margin-bottom: 8px;
+        }
+        
+        .filter-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .filter-option {
+            display: flex;
+            align-items: center;
+            margin-right: 15px;
+            margin-bottom: 5px;
+        }
+        
+        .filter-option input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        
+        .filter-option label {
+            font-size: 13px;
+            color: #5f6368;
+            cursor: pointer;
+        }
+        
+        .filter-option input[type="checkbox"]:checked + label {
+            color: #4285f4;
+            font-weight: 500;
+        }
+        
+        .toggle-filters {
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+        
+        .toggle-filters:hover {
+            background: #357ae8;
+        }
+        
+        .filters-content {
+            display: none;
+        }
+        
+        .filters-content.show {
+            display: block;
+        }
+        
         @media (max-width: 600px) {
             .logo {
                 font-size: 36px;
@@ -267,6 +337,65 @@
                 <button type="submit" class="search-button">Search</button>
             </center>
         </form>
+        
+        <!-- Filters -->
+        {% if filter_options %}
+        <div class="filters">
+            <button type="button" class="toggle-filters" onclick="toggleFilters()">🔧 Filters</button>
+            <div class="filters-content" id="filtersContent">
+                <form method="POST" id="filterForm">
+                    <input type="hidden" name="query" value="{{ query }}">
+                    
+                    {% if filter_options.domains %}
+                    <div class="filter-section">
+                        <div class="filter-title">Domain</div>
+                        <div class="filter-options">
+                            {% for domain in filter_options.domains[:5] %}
+                            <div class="filter-option">
+                                <input type="checkbox" name="domain" value="{{ domain }}" id="domain_{{ domain }}" 
+                                       {% if domain in current_filters.get('domain', []) %}checked{% endif %}>
+                                <label for="domain_{{ domain }}">{{ domain }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if filter_options.content_types %}
+                    <div class="filter-section">
+                        <div class="filter-title">Content Type</div>
+                        <div class="filter-options">
+                            {% for ctype in filter_options.content_types %}
+                            <div class="filter-option">
+                                <input type="checkbox" name="content_type" value="{{ ctype }}" id="ctype_{{ ctype }}"
+                                       {% if ctype in current_filters.get('content_type', []) %}checked{% endif %}>
+                                <label for="ctype_{{ ctype }}">{{ ctype }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if filter_options.dates %}
+                    <div class="filter-section">
+                        <div class="filter-title">Date</div>
+                        <div class="filter-options">
+                            {% for date in filter_options.dates[:5] %}
+                            <div class="filter-option">
+                                <input type="checkbox" name="date" value="{{ date }}" id="date_{{ date }}"
+                                       {% if date in current_filters.get('date', []) %}checked{% endif %}>
+                                <label for="date_{{ date }}">{{ date }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <button type="submit" class="search-button" style="margin-top: 10px;">Apply Filters</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
         
         <!-- Search History -->
         {% if recent_searches or popular_queries %}
@@ -449,6 +578,11 @@
                         }
                     });
             }
+        }
+        
+        function toggleFilters() {
+            const filtersContent = document.getElementById('filtersContent');
+            filtersContent.classList.toggle('show');
         }
     </script>
 </body>

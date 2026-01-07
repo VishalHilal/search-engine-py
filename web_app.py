@@ -21,8 +21,17 @@ def create_app(search_engine):
             query = request.form.get('query', '')
             page = int(request.form.get('page', 1))
             
+            # Extract filters
+            filters = {}
+            if request.form.get('domain'):
+                filters['domain'] = request.form.getlist('domain')
+            if request.form.get('content_type'):
+                filters['content_type'] = request.form.getlist('content_type')
+            if request.form.get('date'):
+                filters['date'] = request.form.getlist('date')
+            
             if query:
-                all_results = search_engine.search(query, top_k=100)  # Get more results for pagination
+                all_results = search_engine.search(query, top_k=100, filters=filters if filters else None)
                 total_results = len(all_results)
                 total_pages = (total_results + results_per_page - 1) // results_per_page
                 
@@ -50,7 +59,9 @@ def create_app(search_engine):
                             total_results=total_results,
                             results_per_page=results_per_page,
                             recent_searches=search_history.get_recent_searches(5),
-                            popular_queries=search_history.get_popular_queries(5))
+                            popular_queries=search_history.get_popular_queries(5),
+                            filter_options=search_engine.get_filter_options(),
+                            current_filters=filters if 'filters' in locals() else {})
     
     @app.route('/suggest')
     def suggest():

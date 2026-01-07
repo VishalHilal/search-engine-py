@@ -14,6 +14,13 @@
         body {
             font-family: Arial, sans-serif;
             background: #fff;
+            color: #202124;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        
+        body.dark-mode {
+            background: #202124;
+            color: #e8eaed;
         }
         
         .container {
@@ -45,6 +52,14 @@
             border-radius: 24px;
             outline: none;
             transition: box-shadow 0.2s;
+            background: white;
+            color: #202124;
+        }
+        
+        body.dark-mode .search-box {
+            background: #303134;
+            border-color: #5f6368;
+            color: #e8eaed;
         }
         
         .search-box:focus {
@@ -80,6 +95,12 @@
             border-left: 3px solid #4285f4;
             background: #f8f9fa;
             border-radius: 4px;
+            transition: background-color 0.3s ease;
+        }
+        
+        body.dark-mode .result {
+            background: #303134;
+            border-left-color: #8ab4f8;
         }
         
         .result-title {
@@ -87,6 +108,11 @@
             color: #1a0dab;
             margin-bottom: 5px;
             font-weight: normal;
+            transition: color 0.3s ease;
+        }
+        
+        body.dark-mode .result-title {
+            color: #8ab4f8;
         }
         
         .result-title:hover {
@@ -322,6 +348,30 @@
             text-decoration: underline;
         }
         
+        .sort-options {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e8eaed;
+        }
+        
+        .sort-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #5f6368;
+            margin-bottom: 8px;
+        }
+        
+        .sort-select {
+            padding: 8px 12px;
+            border: 1px solid #dfe1e5;
+            border-radius: 4px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+        }
+        
         @media (max-width: 600px) {
             .logo {
                 font-size: 36px;
@@ -461,6 +511,34 @@
             </form>
         </div>
         {% endif %}
+        
+        <!-- Sort Options -->
+        <div class="sort-options">
+            <div class="sort-title">Sort by:</div>
+            <form method="POST" style="display: inline;">
+                <input type="hidden" name="query" value="{{ query }}">
+                {% if current_filters.domain %}
+                    {% for domain in current_filters.domain %}
+                        <input type="hidden" name="domain" value="{{ domain }}">
+                    {% endfor %}
+                {% endif %}
+                {% if current_filters.content_type %}
+                    {% for ctype in current_filters.content_type %}
+                        <input type="hidden" name="content_type" value="{{ ctype }}">
+                    {% endfor %}
+                {% endif %}
+                {% if current_filters.date %}
+                    {% for date in current_filters.date %}
+                        <input type="hidden" name="date" value="{{ date }}">
+                    {% endfor %}
+                {% endif %}
+                <select name="sort_by" class="sort-select" onchange="this.form.submit()">
+                    <option value="relevance" {% if sort_by == 'relevance' %}selected{% endif %}>Relevance</option>
+                    <option value="date" {% if sort_by == 'date' %}selected{% endif %}>Date (Newest First)</option>
+                    <option value="alphabetical" {% if sort_by == 'alphabetical' %}selected{% endif %}>Alphabetical</option>
+                </select>
+            </form>
+        </div>
         
         {% if results %}
             <div class="stats">Found {{ total_results }} results (page {{ page }} of {{ total_pages }})</div>

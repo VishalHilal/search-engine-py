@@ -303,6 +303,25 @@
             display: block;
         }
         
+        .spell-correction {
+            background: #e8f0fe;
+            border: 1px solid #4285f4;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .spell-correction a {
+            color: #4285f4;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        .spell-correction a:hover {
+            text-decoration: underline;
+        }
+        
         @media (max-width: 600px) {
             .logo {
                 font-size: 36px;
@@ -427,6 +446,19 @@
             <div style="text-align: right; margin-top: 10px;">
                 <a href="#" class="clear-history" onclick="clearHistory(); return false;">Clear History</a>
             </div>
+        </div>
+        {% endif %}
+        
+        <!-- Spell Correction -->
+        {% if spell_correction %}
+        <div class="spell-correction">
+            {{ spell_correction.message }}
+            <form method="POST" style="display: inline;">
+                <input type="hidden" name="query" value="{{ spell_correction.corrected }}">
+                <button type="submit" style="border: none; background: none; color: #4285f4; text-decoration: underline; cursor: pointer; font-weight: bold;">
+                    {{ spell_correction.corrected }}
+                </button>
+            </form>
         </div>
         {% endif %}
         

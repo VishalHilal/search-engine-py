@@ -3,6 +3,7 @@ import math
 import json
 from collections import defaultdict, Counter
 from config import INDEX_FILE
+from spell_checker import SpellChecker
 
 
 class QueryParser:
@@ -38,6 +39,7 @@ class SearchEngine:
         self.inverted_index = defaultdict(list)
         self.doc_count = 0
         self.idf_scores = {}
+        self.spell_checker = None
         
     def tokenize(self, text):
         """Convert text into tokens (words)"""
@@ -73,6 +75,9 @@ class SearchEngine:
         
         # Build domain and content type indexes for filtering
         self.build_filter_indexes()
+        
+        # Initialize spell checker with dictionary words
+        self.spell_checker = SpellChecker(list(self.inverted_index.keys()))
         
         print(f"Index built with {len(self.inverted_index)} unique terms!")
     
@@ -122,43 +127,91 @@ class SearchEngine:
         idf = self.idf_scores[term]
         return tf * idf
     
-    def search(self, query, top_k=10, filters=None):
+    def search(self, query, top_k=10, filters=None, sort_by='relevance'):
         """Search for documents matching the query with advanced operators and filters"""
+        # Check for spelling corrections
+        corrected_query, was_corrected = self._check_spelling(query)
+        
         # Parse the query
-        tokens, phrases = QueryParser.parse_query(query)
+        tokens, phrases = QueryParser.parse_query(corrected_query)
         
         # If no operators found, use simple search
         if not any(token in ['AND', 'OR', 'NOT', '(', ')'] for token in tokens) and not phrases:
-            return self._simple_search(query, top_k, filters)
+            results = self._simple_search(corrected_query, top_k, filters, sort_by)
+        else:
+            # Advanced search with filters
+            matching_docs = []
+            
+            # Apply filters first to get candidate documents
+            candidate_docs = self.apply_filters(filters) if filters else set(range(len(self.documents)))
+            
+            for doc_id in candidate_docs:
+                if self.evaluate_query(tokens, doc_id):
+                    # Calculate relevance score
+                    score = self._calculate_relevance_score(tokens, doc_id)
+                    matching_docs.append((doc_id, score))
+            
+            # Sort results
+            matching_docs = self._sort_results(matching_docs, sort_by)
+            
+            # Return top results
+            results = []
+            for doc_id, score in matching_docs[:top_k]:
+                doc = self.documents[doc_id]
+                results.append({
+                    'url': doc['url'],
+                    'title': doc['title'],
+                    'snippet': doc['content'][:200] + '...',
+                    'score': score,
+                    'metadata': doc.get('metadata', {})
+                })
         
-        # Advanced search with filters
-        matching_docs = []
-        
-        # Apply filters first to get candidate documents
-        candidate_docs = self.apply_filters(filters) if filters else set(range(len(self.documents)))
-        
-        for doc_id in candidate_docs:
-            if self.evaluate_query(tokens, doc_id):
-                # Calculate relevance score
-                score = self._calculate_relevance_score(tokens, doc_id)
-                matching_docs.append((doc_id, score))
-        
-        # Sort by score
-        matching_docs.sort(key=lambda x: x[1], reverse=True)
-        
-        # Return top results
-        results = []
-        for doc_id, score in matching_docs[:top_k]:
-            doc = self.documents[doc_id]
-            results.append({
-                'url': doc['url'],
-                'title': doc['title'],
-                'snippet': doc['content'][:200] + '...',
-                'score': score,
-                'metadata': doc.get('metadata', {})
+        # Add spell correction info to results
+        if was_corrected:
+            results.insert(0, {
+                'spell_correction': {
+                    'original': query,
+                    'corrected': corrected_query,
+                    'message': f'Did you mean: "{corrected_query}"?'
+                }
             })
         
         return results
+    
+    def _sort_results(self, results, sort_by):
+        """Sort search results by specified criteria"""
+        if sort_by == 'date':
+            # Sort by publication date (newest first)
+            dated_results = []
+            for doc_id, score in results:
+                doc = self.documents[doc_id]
+                pub_date = doc.get('metadata', {}).get('publication_date', '')
+                dated_results.append((doc_id, score, pub_date))
+            
+            dated_results.sort(key=lambda x: (x[2] != '', x[2]), reverse=True)
+            return [(doc_id, score) for doc_id, score, _ in dated_results]
+        
+        elif sort_by == 'alphabetical':
+            # Sort by title alphabetically
+            alpha_results = []
+            for doc_id, score in results:
+                title = self.documents[doc_id]['title'].lower()
+                alpha_results.append((doc_id, score, title))
+            
+            alpha_results.sort(key=lambda x: x[2])
+            return [(doc_id, score) for doc_id, score, _ in alpha_results]
+        
+        else:  # relevance (default)
+            # Sort by relevance score (highest first)
+            results.sort(key=lambda x: x[1], reverse=True)
+            return results
+    
+    def _check_spelling(self, query):
+        """Check and correct spelling in query"""
+        if not self.spell_checker:
+            return query, False
+        
+        return self.spell_checker.correct_query(query)
     
     def apply_filters(self, filters):
         """Apply filters to get candidate documents"""
@@ -195,8 +248,8 @@ class SearchEngine:
             'dates': sorted(list(self.date_index.keys()), reverse=True)
         }
     
-    def _simple_search(self, query, top_k=10, filters=None):
-        """Original simple search implementation with filters"""
+    def _simple_search(self, query, top_k=10, filters=None, sort_by='relevance'):
+        """Original simple search implementation with filters and sorting"""
         query_tokens = self.tokenize(query)
         
         if not query_tokens:
@@ -215,12 +268,13 @@ class SearchEngine:
                     if doc_id in candidate_docs:  # Only consider filtered documents
                         scores[doc_id] += self.calculate_tf_idf(term, doc_id)
         
-        # Sort by score
-        ranked_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        # Convert to list and sort
+        results_list = [(doc_id, score) for doc_id, score in scores.items()]
+        results_list = self._sort_results(results_list, sort_by)
         
         # Return top results
         results = []
-        for doc_id, score in ranked_docs[:top_k]:
+        for doc_id, score in results_list[:top_k]:
             doc = self.documents[doc_id]
             results.append({
                 'url': doc['url'],

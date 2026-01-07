@@ -30,10 +30,21 @@ def create_app(search_engine):
             if request.form.get('date'):
                 filters['date'] = request.form.getlist('date')
             
+            # Extract sort option
+            sort_by = request.form.get('sort_by', 'relevance')
+            
             if query:
-                all_results = search_engine.search(query, top_k=100, filters=filters if filters else None)
+                all_results = search_engine.search(query, top_k=100, filters=filters if filters else None, sort_by=sort_by)
                 total_results = len(all_results)
                 total_pages = (total_results + results_per_page - 1) // results_per_page
+                
+                # Handle spell correction
+                spell_correction = None
+                if all_results and 'spell_correction' in all_results[0]:
+                    spell_correction = all_results[0]['spell_correction']
+                    all_results = all_results[1:]  # Remove spell correction from results
+                    total_results = len(all_results)
+                    total_pages = (total_results + results_per_page - 1) // results_per_page
                 
                 # Add to search history (only on first page, not pagination)
                 if page == 1:
@@ -61,7 +72,9 @@ def create_app(search_engine):
                             recent_searches=search_history.get_recent_searches(5),
                             popular_queries=search_history.get_popular_queries(5),
                             filter_options=search_engine.get_filter_options(),
-                            current_filters=filters if 'filters' in locals() else {})
+                            current_filters=filters if 'filters' in locals() else {},
+                            spell_correction=spell_correction if 'spell_correction' in locals() else None,
+                            sort_by=sort_by if 'sort_by' in locals() else 'relevance')
     
     @app.route('/suggest')
     def suggest():

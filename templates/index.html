@@ -381,13 +381,35 @@
                 font-size: 18px;
             }
         }
+
+:root{color-scheme:light;--page:#f5f7fb;--surface:#fff;--muted:#64748b;--text:#172033;--border:#e2e8f0;--accent:#4263eb;--link:#3156c8;--shadow:0 12px 34px rgba(15,23,42,.07)}
+body{background:var(--page);color:var(--text);min-height:100vh}
+body.dark-mode{color-scheme:dark;--page:#0b1120;--surface:#111b2e;--muted:#9aabc4;--text:#e5edf9;--border:#293750;--accent:#829bff;--link:#a9baff;--shadow:0 12px 34px rgba(0,0,0,.2)}
+.container{max-width:900px;padding:24px 24px 56px}.header{margin:54px 0 30px;position:relative}
+.logo{color:var(--text);font-size:clamp(36px,6vw,54px);font-weight:750;letter-spacing:-2px}
+.header-subtitle,.stats,.result-snippet{color:var(--muted)}
+.theme-toggle{position:absolute;top:0;right:0;border:1px solid var(--border);border-radius:999px;padding:9px 13px;background:var(--surface);color:var(--text);cursor:pointer;font-size:13px;font-weight:600}
+.search-form{margin:0 auto 28px;max-width:720px}.search-box{min-height:56px;padding:14px 22px;border:1px solid var(--border);border-radius:18px;background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.search-button{margin-top:14px;padding:12px 28px;border-radius:12px;background:var(--accent);font-weight:650}
+.result{margin:14px 0;padding:20px 22px;border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:14px;background:var(--surface);box-shadow:0 4px 16px rgba(15,23,42,.035);transition:transform .18s,box-shadow .18s}
+.result:hover{transform:translateY(-2px);box-shadow:var(--shadow)}.result-title{font-size:19px;line-height:1.4;margin-bottom:6px}
+.result-title a{color:var(--link);text-decoration:none}.result-title a:hover{text-decoration:underline}
+.result-url{color:#16804a;overflow-wrap:anywhere}body.dark-mode .result-url{color:#75d6a1}.result-snippet{line-height:1.7}
+.filters,.search-history,.sort-options{background:var(--surface);border:1px solid var(--border);border-radius:14px}
+.filter-title,.history-title,.sort-title{color:var(--text)}.filter-option label{color:var(--muted)}
+.sort-select,.autocomplete-items{background:var(--surface);color:var(--text);border-color:var(--border)}
+.autocomplete-items div:hover{background:#f1f5f9}.history-item{background:var(--surface);border-color:var(--border);color:var(--link)}
+.no-results{color:var(--muted);padding:42px 20px;background:var(--surface);border:1px dashed var(--border);border-radius:14px}
+@media(max-width:600px){.container{padding:18px 14px 40px}.header{margin:62px 0 26px}.logo{font-size:36px}.theme-toggle{top:-44px}.result{padding:16px}.result-title{font-size:18px}}
+
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">🔍 MySearch</div>
-            <div style="text-align: center; margin-bottom: 20px; color: #70757a; font-size: 14px;">
+            <div class="logo">🔎 MySearch</div>
+            <button type="button" class="theme-toggle" id="themeToggle">🌙 Dark mode</button>
+            <div class="header-subtitle" style="text-align: center; margin-bottom: 20px;">
                 Advanced search: Use AND, OR, NOT, "quotes for phrases", and parentheses ( )
             </div>
         </div>
@@ -395,6 +417,7 @@
         <form method="POST" class="search-form">
             <div class="autocomplete">
                 <input type="text" 
+                       aria-label="Search query"
                        name="query" 
                        class="search-box" 
                        placeholder="Search the web..." 
@@ -544,7 +567,7 @@
             <div class="stats">Found {{ total_results }} results (page {{ page }} of {{ total_pages }})</div>
             {% for result in results %}
             <div class="result">
-                <div class="result-title">{{ result.title|safe }}</div>
+                <div class="result-title"><a href="{{ result.url }}" target="_blank" rel="noopener noreferrer">{{ result.title|safe }}</a></div>
                 <div class="result-url">{{ result.url }}</div>
                 <div class="result-snippet">{{ result.snippet|safe }}</div>
             </div>
@@ -596,6 +619,21 @@
     </div>
     
     <script>
+        
+        const themeToggle = document.getElementById("themeToggle");
+        if (localStorage.getItem("mysearch-theme") === "dark") document.body.classList.add("dark-mode");
+        function updateThemeButton() {
+            const dark = document.body.classList.contains("dark-mode");
+            themeToggle.textContent = dark ? "☀️ Light mode" : "🌙 Dark mode";
+            themeToggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+        }
+        updateThemeButton();
+        themeToggle.addEventListener("click", () => {
+            document.body.classList.toggle("dark-mode");
+            localStorage.setItem("mysearch-theme", document.body.classList.contains("dark-mode") ? "dark" : "light");
+            updateThemeButton();
+        });
+
         let currentFocus = -1;
         
         function autocomplete(inp) {
@@ -617,11 +655,14 @@
                         
                         for (i = 0; i < data.length; i++) {
                             b = document.createElement("DIV");
-                            b.innerHTML = "<strong>" + data[i].substr(0, val.length) + "</strong>";
-                            b.innerHTML += data[i].substr(val.length);
-                            b.innerHTML += "<input type='hidden' value='" + data[i] + "'>";
+                            const suggestion = String(data[i]);
+                            const match = document.createElement("strong");
+                            match.textContent = suggestion.slice(0, val.length);
+                            b.appendChild(match);
+                            b.appendChild(document.createTextNode(suggestion.slice(val.length)));
+                            b.dataset.suggestion = suggestion;
                             b.addEventListener("click", function(e) {
-                                inp.value = this.getElementsByTagName("input")[0].value;
+                                inp.value = this.dataset.suggestion || "";
                                 closeAllLists();
                                 inp.form.submit();
                             });
